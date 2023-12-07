@@ -3,33 +3,49 @@ import requests
 # Replace these variables with your own values
 github_username = "srajthakur"
 github_repo = "testgit"
-access_token = "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"
-
+access_token = "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"
+branch_name = 'master'
+new_branch = 'restoremaster4'
 # Step 1: Get Access Token
 headers = {"Authorization": f"token {access_token}"}
 
 # Step 2: Fetch ZIP of Master Branch
+#master_sha_url = f"https://api.github.com/repos/{github_username}/git/refs/{github_repo}"
+branch_sha_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/refs/heads/{branch_name}"
 zip_url = f"https://api.github.com/repos/{github_username}/{github_repo}/zipball/master"
 response = requests.get(zip_url, headers=headers)
+response = requests.get(branch_sha_url, headers=headers)
+response.raise_for_status()
+
+
+# Extract the SHA of the branch
+branch_sha = response.json().get("object", {}).get("sha")
+
+
+
+if response.status_code == 200:
+    print("Access token is valid.")
+else:
+    print(f"Access token is invalid. Status code: {response.status_code}")
+    print("Response:", response.json())
 with open("master.zip", "wb") as f:
     f.write(response.content)
 
 # Step 3: Create Branch
 branch_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/refs"
 branch_data = {
-    "ref": "refs/heads/restoremaster",
-    "sha": "main"  # Use the SHA of the master branch
+    "ref": f"refs/heads/{new_branch}",
+    "sha": branch_sha  # Use the SHA of the master branch
 }
 response = requests.post(branch_url, headers=headers, json=branch_data)
 # Print the response content for debugging
-print(response.content)
-print("dsfaaaaaaaaaaaaaaaaaaaaaaaa")
+
 
 # Check if the response was successful
 response.raise_for_status()
 
 # Extract the SHA of the new branch
-restoremaster_sha = response.json().get("object", {}).get("sha")
+new_branch_sha = response.json().get("object", {}).get("sha")
 
 # Step 4: Upload ZIP to New Branch
 upload_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/blobs"
@@ -44,7 +60,7 @@ response = requests.post(upload_url, headers=headers, json=blob_data)
 blob_sha = response.json()["sha"]
 
 tree_data = {
-    "base_tree": restoremaster_sha,
+    "base_tree": new_branch_sha,
     "tree": [
         {
             "path": "master.zip",
@@ -60,8 +76,8 @@ response = requests.post(tree_url, headers=headers, json=tree_data)
 tree_sha = response.json()["sha"]
 
 commit_data = {
-    "message": "Upload ZIP to restoremaster branch",
-    "parents": [restoremaster_sha],
+    "message": "Upload ZIP to new_branch ",
+    "parents": [new_branch_sha],
     "tree": tree_sha
 }
 
@@ -69,7 +85,7 @@ commit_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/
 response = requests.post(commit_url, headers=headers, json=commit_data)
 commit_sha = response.json()["sha"]
 
-update_ref_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/refs/heads/restoremaster"
+update_ref_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/refs/heads/{new_branch}"
 update_ref_data = {
     "sha": commit_sha
 }
@@ -77,8 +93,12 @@ update_ref_data = {
 response = requests.patch(update_ref_url, headers=headers, json=update_ref_data)
 
 # Step 5: Compare Master and Restore Master
-compare_url = f"https://api.github.com/repos/{github_username}/{github_repo}/compare/master...restoremaster"
+compare_url = f"https://api.github.com/repos/{github_username}/{github_repo}/compare/master...{new_branch}"
 response = requests.get(compare_url, headers=headers)
 comparison_data = response.json()
+response.raise_for_status()
 
-print("Comparison URL:", comparison_data["html_url"])
+# Check if there are differences
+are_differences = response.json()["status"] != "identical"
+
+print(f"Are there differences between {branch_name} and restoremaster? {are_differences}")
