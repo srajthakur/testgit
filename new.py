@@ -4,7 +4,7 @@ import base64
 # Replace these variables with your own values
 github_username = "srajthakur"
 github_repo = "testgit"
-access_token = "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"
+access_token = "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"
 branch_name = 'master'
 new_branch = 'restoremaster8'
 
