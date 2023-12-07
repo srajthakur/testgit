@@ -1,11 +1,13 @@
 import requests
-
+import os
+import base64
 # Replace these variables with your own values
 github_username = "srajthakur"
 github_repo = "testgit"
-access_token = "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"
+access_token = "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"
 branch_name = 'master'
-new_branch = 'restoremaster4'
+new_branch = 'restoremaster8'
+
 # Step 1: Get Access Token
 headers = {"Authorization": f"token {access_token}"}
 
@@ -13,9 +15,9 @@ headers = {"Authorization": f"token {access_token}"}
 #master_sha_url = f"https://api.github.com/repos/{github_username}/git/refs/{github_repo}"
 branch_sha_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/refs/heads/{branch_name}"
 zip_url = f"https://api.github.com/repos/{github_username}/{github_repo}/zipball/master"
-response = requests.get(zip_url, headers=headers)
+
 response = requests.get(branch_sha_url, headers=headers)
-response.raise_for_status()
+# response.raise_for_status()
 
 
 # Extract the SHA of the branch
@@ -28,6 +30,7 @@ if response.status_code == 200:
 else:
     print(f"Access token is invalid. Status code: {response.status_code}")
     print("Response:", response.json())
+response = requests.get(zip_url, headers=headers)
 with open("master.zip", "wb") as f:
     f.write(response.content)
 
@@ -47,28 +50,54 @@ response.raise_for_status()
 # Extract the SHA of the new branch
 new_branch_sha = response.json().get("object", {}).get("sha")
 
+
+import zipfile
+
+
+
+with zipfile.ZipFile('master.zip', 'r') as zip_ref:
+    zip_ref.extractall()
+
 # Step 4: Upload ZIP to New Branch
 upload_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/blobs"
-with open("master.zip", "rb") as f:
-    zip_content = f.read()
+contents = []
+source_folder = 'unzipped/' + os.listdir('unzipped')[0]
+for root, dirs, files in os.walk(source_folder):
+    for file in files:
+        file_path = os.path.relpath(os.path.join(root, file), source_folder)
+        contents.append(file_path)
 
-blob_data = {
-    "content": zip_content,
-    "encoding": "base64"
-}
-response = requests.post(upload_url, headers=headers, json=blob_data)
-blob_sha = response.json()["sha"]
+# Step 2: Create Blobs
+blob_shas = {}
+for file_path in contents:
+    with open(os.path.join(source_folder, file_path), 'rb') as f:
+        content = f.read()
+        encoded_content = base64.b64encode(content).decode('utf-8')
+
+    blob_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/blobs"
+    blob_data = {
+        "content": encoded_content,
+        "encoding": "base64"
+    }
+
+    response = requests.post(blob_url, headers={"Authorization": f"token {access_token}"}, json=blob_data)
+    response.raise_for_status()
+    blob_shas[file_path] = response.json()["sha"]
+
+# Step 3: Create Trees
+tree = []
+for file_path, blob_sha in blob_shas.items():
+    tree_entry = {
+        "path": file_path,
+        "mode": "100644",  # File mode
+        "type": "blob",
+        "sha": blob_sha
+    }
+    tree.append(tree_entry)
 
 tree_data = {
-    "base_tree": new_branch_sha,
-    "tree": [
-        {
-            "path": "master.zip",
-            "mode": "100644",
-            "type": "blob",
-            "sha": blob_sha
-        }
-    ]
+    "base_tree": None,  # Use None for the initial commit
+    "tree": tree
 }
 
 tree_url = f"https://api.github.com/repos/{github_username}/{github_repo}/git/trees"
